@@ -145,6 +145,22 @@ export function sanitizeMetadata(text: string): string {
   return sanitizeUntrusted(text, { singleLine: true, maxChars: METADATA_MAX_CHARS });
 }
 
+export interface SanitizedResourceMetadata {
+  url?: string;
+  description?: string;
+  mimeType?: string;
+}
+
+export function sanitizeResourceMetadata(metadata: unknown): SanitizedResourceMetadata {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return {};
+  const record = metadata as Record<string, unknown>;
+  return {
+    ...(typeof record.url === "string" && { url: sanitizeMetadata(record.url) }),
+    ...(typeof record.description === "string" && { description: sanitizeMetadata(record.description) }),
+    ...(typeof record.mimeType === "string" && { mimeType: sanitizeMetadata(record.mimeType) }),
+  };
+}
+
 /**
  * Render server-supplied text as fenced untrusted data.
  *

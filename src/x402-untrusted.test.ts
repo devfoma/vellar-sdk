@@ -8,6 +8,7 @@ import {
   REMOVED_FENCE_MARKER,
   renderUntrusted,
   sanitizeMetadata,
+  sanitizeResourceMetadata,
   sanitizeUntrusted,
   terminatorOf,
 } from "./x402-untrusted";
@@ -104,5 +105,20 @@ describe("fence invariants", () => {
     const out = sanitizeMetadata("x".repeat(5000));
     expect(out).toContain("[clamped]");
     expect(out.length).toBeLessThan(METADATA_MAX_CHARS + 20);
+  });
+
+  it("sanitizes structured resource metadata fields", () => {
+    expect(
+      sanitizeResourceMetadata({
+        url: "https://example.com/pay\nx",
+        description: "safe\u202e text",
+        mimeType: "text/plain",
+        ignored: "field",
+      }),
+    ).toEqual({
+      url: "https://example.com/pay x",
+      description: "safe text",
+      mimeType: "text/plain",
+    });
   });
 });

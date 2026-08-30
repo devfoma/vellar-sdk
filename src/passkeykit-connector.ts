@@ -59,6 +59,8 @@ export interface PasskeyKitConnectorOptions {
   /** Shown in the platform passkey prompt (WebAuthn RP display name). */
   appName: string;
   now?: () => Date;
+  /** Minimum milliseconds between browser passkey ceremonies. */
+  ceremonyCooldownMs?: number;
   /** Converts kit.sign output to XDR. Default handles strings and objects with toXDR(). */
   signedToXdr?: (signed: unknown) => string;
 }
@@ -97,6 +99,16 @@ export class PasskeyBrowserRequiredError extends Error {
   }
 }
 
+export class PasskeyCeremonyRateLimitError extends Error {
+  readonly retryAfterMs: number;
+
+  constructor(retryAfterMs: number) {
+    super(`Passkey ceremony rate limit exceeded. Retry after ${retryAfterMs}ms.`);
+    this.name = "PasskeyCeremonyRateLimitError";
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
 /**
  * Passkey ceremonies die deep inside the kit with a raw WebAuthnError when run
  * outside a browser; this guard fails first, with the actionable message.
@@ -113,10 +125,21 @@ function assertBrowserWebAuthnContext(operation: string): void {
 export function createPasskeyKitConnector(options: PasskeyKitConnectorOptions): WalletConnector {
   const { kit, backend, network, appName } = options;
   const now = options.now ?? (() => new Date());
+  const ceremonyCooldownMs = options.ceremonyCooldownMs ?? 1_000;
   const signedToXdr = options.signedToXdr ?? defaultSignedToXdr;
+  let nextCeremonyAt = 0;
 
   function assertNetwork(requested: Network): void {
     if (requested !== network) throw new WalletNetworkMismatchError(network, requested);
+  }
+
+  function throttleCeremony(operation: string): void {
+    const current = now().getTime();
+    if (current < nextCeremonyAt) {
+      throw new PasskeyCeremonyRateLimitError(nextCeremonyAt - current);
+    }
+    nextCeremonyAt = current + ceremonyCooldownMs;
+    assertBrowserWebAuthnContext(operation);
   }
 
   function sessionFor(
@@ -139,8 +162,8 @@ export function createPasskeyKitConnector(options: PasskeyKitConnectorOptions): 
 
   return {
     async createWallet(input: CreateWalletInput): Promise<WalletSession> {
-      assertBrowserWebAuthnContext("createWallet() (vellar.create())");
       assertNetwork(input.network);
+      throttleCeremony("createWallet() (vellar.create())");
       const username = input.username?.trim() || "Vellar user";
       const { keyIdBase64, contractId, signedTx } = await kit.createWallet(appName, username);
       // Backend submission must succeed before we report a wallet as created —
@@ -155,8 +178,8 @@ export function createPasskeyKitConnector(options: PasskeyKitConnectorOptions): 
     },
 
     async connectWallet(requested: Network): Promise<WalletSession> {
-      assertBrowserWebAuthnContext("connectWallet() (vellar.connect())");
       assertNetwork(requested);
+      throttleCeremony("connectWallet() (vellar.connect())");
       // The lookup that resolves the wallet also opens the server session
       // record; capture its id for device management.
       let serverSessionId: string | undefined;

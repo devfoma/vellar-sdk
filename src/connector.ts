@@ -17,3 +17,22 @@ export interface WalletConnector {
   /** Produce a signature/auth for a reviewed transaction (sign flow). */
   signTransaction(input: SignTransactionInput): Promise<SignedTransaction>;
 }
+
+export function normalizeAllowedOrigins(origins: readonly string[]): string[] {
+  return Array.from(
+    new Set(
+      origins.map((origin) => new URL(origin).origin).filter((origin) => origin.startsWith("https://")),
+    ),
+  ).sort();
+}
+
+export function isAllowedOrigin(origin: string, allowedOrigins: readonly string[]): boolean {
+  if (allowedOrigins.length === 0) return false;
+  let normalized: string;
+  try {
+    normalized = new URL(origin).origin;
+  } catch {
+    return false;
+  }
+  return normalizeAllowedOrigins(allowedOrigins).includes(normalized);
+}

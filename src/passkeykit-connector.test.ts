@@ -3,6 +3,7 @@ import {
   createPasskeyKitConnector,
   defaultSignedToXdr,
   PasskeyBrowserRequiredError,
+  PasskeyCeremonyRateLimitError,
   resumeKitConnection,
   WalletNetworkMismatchError,
   type PasskeyKitLike,
@@ -193,6 +194,27 @@ describe("connectWallet", () => {
     await expect(connector().connectWallet("mainnet")).rejects.toBeInstanceOf(
       WalletNetworkMismatchError,
     );
+  });
+
+  it("rate-limits repeated passkey ceremonies", async () => {
+    const kit = fakeKit();
+    let nowMs = FIXED_NOW.getTime();
+    const wallet = createPasskeyKitConnector({
+      kit,
+      backend: fakeBackend(),
+      network: "testnet",
+      appName: "Vellar",
+      now: () => new Date(nowMs),
+      ceremonyCooldownMs: 5_000,
+    });
+
+    await wallet.connectWallet("testnet");
+    await expect(wallet.connectWallet("testnet")).rejects.toBeInstanceOf(
+      PasskeyCeremonyRateLimitError,
+    );
+    nowMs += 5_000;
+    await wallet.connectWallet("testnet");
+    expect(kit.connectWallet).toHaveBeenCalledTimes(2);
   });
 });
 

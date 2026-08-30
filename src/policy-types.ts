@@ -43,6 +43,40 @@ export interface ValidationResult {
   errors: string[];
 }
 
+export function validatePolicyDefinition(definition: unknown): ValidationResult {
+  const errors: string[] = [];
+  const policy = definition as Partial<PolicyDefinition> | null;
+
+  if (!policy || typeof policy !== "object" || Array.isArray(policy)) {
+    return { valid: false, errors: ["policy definition must be an object"] };
+  }
+  if (typeof policy.version !== "string" || policy.version.trim() === "") {
+    errors.push("version is required");
+  }
+  if (typeof policy.type !== "string" || policy.type.trim() === "") {
+    errors.push("type is required");
+  }
+  if (!Array.isArray(policy.owners) || policy.owners.length === 0) {
+    errors.push("owners must include at least one address");
+  } else if (policy.owners.some((owner) => typeof owner !== "string" || owner.trim() === "")) {
+    errors.push("owners must be non-empty strings");
+  }
+  if (
+    policy.threshold !== undefined &&
+    (!Number.isInteger(policy.threshold) || policy.threshold < 1 || policy.threshold > (policy.owners?.length ?? 0))
+  ) {
+    errors.push("threshold must be an integer between 1 and owners.length");
+  }
+  if (policy.spendingLimits?.dailyXlm !== undefined && !/^\d+(\.\d{1,7})?$/.test(policy.spendingLimits.dailyXlm)) {
+    errors.push("dailyXlm must be a positive decimal string with at most 7 fractional digits");
+  }
+  if (policy.spendingLimits?.perTxXlm !== undefined && !/^\d+(\.\d{1,7})?$/.test(policy.spendingLimits.perTxXlm)) {
+    errors.push("perTxXlm must be a positive decimal string with at most 7 fractional digits");
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
 export interface GeneratedPolicy {
   id: string;
   createdAt: string;
